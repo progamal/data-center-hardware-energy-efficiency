@@ -1,7 +1,8 @@
 
 import streamlit as st
 import plotly.express as px
-from bigquery_utils import run_query
+import pandas as pd
+from pathlib import Path
 
 st.set_page_config(
     page_title="Cloud Cost Analysis",
@@ -18,11 +19,26 @@ st.markdown(
 
 @st.cache_data(ttl=600)
 def load_cloud_cost():
-    return run_query("""
-        SELECT *
-        FROM `data-center-hardware.analytics.mart_cloud_cost`
-        ORDER BY hourly_price_usd
-    """)
+    csv_path = (
+        Path(__file__).resolve().parents[2]
+        / "data"
+        / "aws_ec2_pricing_cleaned.csv"
+    )
+
+    df = pd.read_csv(csv_path)
+
+    for col in ["hourly_price_usd", "vcpu", "memory_gb"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df["hourly_cost_per_vcpu_usd"] = (
+        df["hourly_price_usd"] / df["vcpu"].replace(0, float("nan"))
+    )
+
+    df["hourly_cost_per_gb_memory_usd"] = (
+        df["hourly_price_usd"] / df["memory_gb"].replace(0, float("nan"))
+    )
+
+    return df.sort_values("hourly_price_usd").reset_index(drop=True)
 
 
 try:
@@ -224,5 +240,5 @@ try:
     )
 
 except Exception as e:
-    st.error("Unable to load Cloud Cost data from BigQuery.")
+    st.error("Unable to load Cloud Cost data from CSV.")
     st.exception(e)

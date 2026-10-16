@@ -1,9 +1,15 @@
 
 import streamlit as st
 import pandas as pd
-from bigquery_utils import run_query
+from pathlib import Path
 
-TABLE = "`data-center-hardware.analytics.mart_server_efficiency`"
+@st.cache_data(ttl=600)
+def load_data():
+    csv_path = Path(__file__).resolve().parents[2] / "data" / "specpower_energy.csv"
+    df = pd.read_csv(csv_path)
+    for col in ["ssj_ops_per_watt", "avg_watts_100", "avg_watts_idle"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
 
 st.title("⚡ Server Energy Efficiency")
 st.caption("Developed by: Ghadi")
@@ -13,46 +19,43 @@ st.markdown(
 )
 
 try:
+    df = load_data()
+
     # 1. Summary KPIs
-    summary = run_query(f"""
-        SELECT
-            COUNT(*) AS total_records,
-            COUNT(DISTINCT hardware_vendor) AS vendors,
-            COUNT(DISTINCT server_model) AS server_models,
-            AVG(ssj_ops_per_watt) AS avg_efficiency,
-            AVG(avg_watts_100) AS avg_full_load_watts,
-            AVG(avg_watts_idle) AS avg_idle_watts
-        FROM {TABLE}
-    """)
+    summary = pd.DataFrame([{
+        "total_records": len(df),
+        "vendors": df["hardware_vendor"].nunique(),
+        "server_models": df["server_model"].nunique(),
+        "avg_efficiency": df["ssj_ops_per_watt"].mean(),
+        "avg_full_load_watts": df["avg_watts_100"].mean(),
+        "avg_idle_watts": df["avg_watts_idle"].mean(),
+    }])
 
     # 2. Average efficiency by vendor and server model
-    models = run_query(f"""
-        SELECT
-            hardware_vendor,
-            server_model,
-            COUNT(*) AS records,
-            AVG(ssj_ops_per_watt) AS avg_efficiency,
-            AVG(avg_watts_100) AS avg_full_load_watts,
-            AVG(avg_watts_idle) AS avg_idle_watts
-        FROM {TABLE}
-        WHERE hardware_vendor IS NOT NULL
-          AND server_model IS NOT NULL
-          AND ssj_ops_per_watt IS NOT NULL
-        GROUP BY hardware_vendor, server_model
-        ORDER BY avg_efficiency DESC
-    """)
+    valid_models = df.dropna(
+        subset=["hardware_vendor", "server_model", "ssj_ops_per_watt"]
+    )
+
+    models = (
+        valid_models
+        .groupby(["hardware_vendor", "server_model"])
+        .agg(
+            records=("ssj_ops_per_watt", "size"),
+            avg_efficiency=("ssj_ops_per_watt", "mean"),
+            avg_full_load_watts=("avg_watts_100", "mean"),
+            avg_idle_watts=("avg_watts_idle", "mean"),
+        )
+        .reset_index()
+        .sort_values("avg_efficiency", ascending=False)
+    )
 
     # 3. Records for the power-efficiency comparison
-    scatter = run_query(f"""
-        SELECT
-            hardware_vendor,
-            server_model,
-            avg_watts_100,
-            ssj_ops_per_watt
-        FROM {TABLE}
-        WHERE avg_watts_100 IS NOT NULL
-          AND ssj_ops_per_watt IS NOT NULL
-    """)
+    scatter = df.dropna(
+        subset=["avg_watts_100", "ssj_ops_per_watt"]
+    )[
+        ["hardware_vendor", "server_model",
+         "avg_watts_100", "ssj_ops_per_watt"]
+    ].copy()
 
     if summary.empty:
         st.warning("No server efficiency data was returned.")
@@ -160,5 +163,5 @@ try:
         )
 
 except Exception as e:
-    st.error("Unable to load server efficiency data from BigQuery.")
+    st.error("Unable to load server efficiency data from CSV.")
     st.exception(e)

@@ -4,9 +4,10 @@ from pathlib import Path
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from bigquery_utils import run_query
+
 
 st.title("🔮 What-If Simulation")
+st.caption("Developed by: Amal")
 st.caption("Interactive Server Selection & Energy Efficiency Analysis")
 
 st.write(
@@ -17,20 +18,32 @@ st.write(
 
 @st.cache_data(ttl=600)
 def load_servers():
-    return run_query("""
-        SELECT
-            hardware_vendor,
-            server_model,
-            ssj_ops_100,
-            avg_watts_100,
-            ssj_ops_per_watt,
-            efficiency_100
-        FROM `data-center-hardware.analytics.mart_server_efficiency`
-        WHERE ssj_ops_100 > 0
-          AND avg_watts_100 > 0
-          AND ssj_ops_per_watt > 0
-          AND efficiency_100 > 0
-    """)
+    import pandas as pd
+
+    csv_path = Path(__file__).resolve().parents[2] / "data" / "specpower_energy.csv"
+
+    df = pd.read_csv(csv_path)
+
+    columns = [
+        "hardware_vendor",
+        "server_model",
+        "ssj_ops_100",
+        "avg_watts_100",
+        "ssj_ops_per_watt",
+        "efficiency_100",
+    ]
+
+    df = df[columns].copy()
+
+    for col in ["ssj_ops_100", "avg_watts_100", "ssj_ops_per_watt", "efficiency_100"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return df[
+        (df["ssj_ops_100"] > 0)
+        & (df["avg_watts_100"] > 0)
+        & (df["ssj_ops_per_watt"] > 0)
+        & (df["efficiency_100"] > 0)
+    ].copy()
 
 
 try:

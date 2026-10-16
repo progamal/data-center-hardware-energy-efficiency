@@ -5,7 +5,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from bigquery_utils import run_query
+from pathlib import Path
 
 
 # ---------------------------------
@@ -30,21 +30,29 @@ st.info(
 
 
 # ---------------------------------
-# Load Data from BigQuery
+# Load Data from CSV
 # ---------------------------------
 @st.cache_data(ttl=600)
 def load_power_data():
-    query = """
-    SELECT
-        hours_from_start,
-        cell,
-        pdu,
-        measured_power_util,
-        production_power_util
-    FROM `data-center-hardware.raw_data.google_power_cella_pdu10_cleaned`
-    ORDER BY hours_from_start
-    """
-    return run_query(query)
+    csv_path = (
+        Path(__file__).resolve().parents[2]
+        / "data"
+        / "google_power_cella_pdu10_cleaned.csv"
+    )
+
+    columns = [
+        "hours_from_start",
+        "cell",
+        "pdu",
+        "measured_power_util",
+        "production_power_util",
+    ]
+
+    df = pd.read_csv(csv_path, usecols=columns)
+
+    return df.sort_values(
+        "hours_from_start"
+    ).reset_index(drop=True)
 
 
 try:

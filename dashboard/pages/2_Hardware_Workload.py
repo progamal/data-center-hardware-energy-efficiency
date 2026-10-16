@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-from bigquery_utils import run_query
+from pathlib import Path
 
 st.set_page_config(
     page_title="Hardware & Workload",
@@ -16,32 +16,36 @@ st.markdown(
     "Explore CPU and memory utilization relative to available machine capacity."
 )
 
-QUERY = """
-SELECT
-    machine_id,
-    platform_id,
-    start_time,
-    end_time,
-    event_time,
-    duration_minutes,
-    avg_cpu_usage,
-    avg_memory_usage,
-    cpu_capacity,
-    memory_capacity,
-    cpu_to_capacity_ratio,
-    memory_to_capacity_ratio
-FROM `data-center-hardware.analytics.mart_hardware_workload`
-"""
-
 @st.cache_data(ttl=600)
 def load_data():
-    return run_query(QUERY)
+    csv_path = (
+        Path(__file__).resolve().parents[2]
+        / "data"
+        / "google_hardware_workload_joined.csv"
+    )
+
+    columns = [
+        "machine_id",
+        "platform_id",
+        "start_time",
+        "end_time",
+        "event_time",
+        "duration_minutes",
+        "avg_cpu_usage",
+        "avg_memory_usage",
+        "cpu_capacity",
+        "memory_capacity",
+        "cpu_to_capacity_ratio",
+        "memory_to_capacity_ratio",
+    ]
+
+    return pd.read_csv(csv_path, usecols=columns)[columns].copy()
 
 try:
     df = load_data()
 
     if df.empty:
-        st.warning("No workload records were returned from BigQuery.")
+        st.warning("No workload records were found in the CSV.")
         st.stop()
 
     for col in ["cpu_to_capacity_ratio", "memory_to_capacity_ratio"]:
@@ -156,9 +160,9 @@ try:
         st.dataframe(df, use_container_width=True, hide_index=True)
 
 except Exception as exc:
-    st.error("Could not load workload data from BigQuery.")
+    st.error("Could not load workload data from CSV.")
     st.exception(exc)
     st.info(
-        "Check your Google Cloud authentication, BigQuery permissions, "
-        "and installed dashboard dependencies."
+        "Check that google_hardware_workload_joined.csv exists "
+        "and contains the expected columns."
     )
