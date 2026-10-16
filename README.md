@@ -101,9 +101,13 @@ flowchart TB
     end
 
     subgraph DEPLOY["Dashboard Deployment"]
+        COMMUNITY["6 · Streamlit Community Cloud<br/>Current Public Dashboard"]
+    end
+
+    subgraph PREVIOUS["Previous Cloud Run Deployment"]
         IMAGE["Docker Image"]
         REGISTRY["Artifact Registry"]
-        CLOUDRUN["6 · Cloud Run<br/>Streamlit Dashboard"]
+        CLOUDRUN["Google Cloud Run<br/>BigQuery-Backed Dashboard"]
         IMAGE --> REGISTRY --> CLOUDRUN
     end
 
@@ -111,6 +115,8 @@ flowchart TB
         ANALYTICS["Server Efficiency<br/>Hardware and Workload<br/>Cloud Cost<br/>What-If Simulation"]
         TRENDS["Power Trends"]
     end
+
+    CSV[("Prepared CSV Files<br/>GitHub Repository")]
 
     TF["Terraform<br/>Infrastructure as Code"]
 
@@ -123,10 +129,13 @@ flowchart TB
     BUILD -. "runs dbt transformations and tests" .-> STAGING
     CHECKS -. "validates analytical data" .-> MARTS
 
-    MARTS --> ANALYTICS
-    RAW --> TRENDS
-    CLOUDRUN --> ANALYTICS
-    CLOUDRUN --> TRENDS
+    PY --> CSV
+    CSV --> COMMUNITY
+    COMMUNITY --> ANALYTICS
+    COMMUNITY --> TRENDS
+
+    MARTS -. "previous dashboard queries" .-> CLOUDRUN
+    RAW -. "previous power queries" .-> CLOUDRUN
     TF -. "manages BigQuery datasets" .-> BQ
 
     classDef source fill:#EEF3FF,stroke:#A5B9E8,color:#26334D
@@ -138,9 +147,9 @@ flowchart TB
 
     class SPEC,CLUSTER,POWER,AWS source
     class PY,STAGING,AIRFLOW,BUILD,CHECKS process
-    class RAW,MARTS storage
+    class RAW,MARTS,CSV storage
     class ANALYTICS,TRENDS dashboard
-    class IMAGE,REGISTRY,CLOUDRUN cloud
+    class IMAGE,REGISTRY,CLOUDRUN,COMMUNITY cloud
     class TF infra
 ```
 
@@ -161,8 +170,8 @@ The project follows these main stages:
 - BigQuery stores seven prepared source tables in `raw_data` and four analytical marts in `analytics`.
 - The manually triggered Airflow DAG runs `dbt build`, followed by four Python validation checks.
 - Airflow runs locally through Docker Compose.
-- Streamlit is deployed on Google Cloud Run.
-- The dashboard’s analytical sections query the marts; Power Trends reads cleaned Cell A power data directly from `raw_data`.
+- The public dashboard is deployed on Streamlit Community Cloud from the `streamlit-community-cloud` branch.
+- The current public dashboard reads prepared CSV files from the repository without requiring a live BigQuery connection. The original BigQuery-backed implementation is preserved on the `main` branch.
 - Terraform manages the BigQuery datasets. Cloud Run and Artifact Registry are not managed by Terraform.
 
 ## Google BigQuery
@@ -252,9 +261,9 @@ The interactive Streamlit dashboard provides five analytical sections:
 2. **Hardware & Workload:** Examine hardware capacity and sampled workload characteristics.
 3. **Cloud Cost:** Compare AWS EC2 instance specifications and pricing.
 4. **Power Trends:** Explore normalized power utilization patterns over time.
-5. **What-If Simulation:** Explore hypothetical infrastructure cost and efficiency scenarios.
+5. **What-If Simulation:** Compare server recommendations under selected performance and full-load power constraints using SPECpower benchmarks.
 
-The dashboard reads analytical data from Google BigQuery.
+The currently deployed dashboard reads prepared CSV datasets stored in the GitHub repository. The original dashboard implementation queried Google BigQuery.
 
 ## Running the Project
 
@@ -274,7 +283,7 @@ From the project root directory:
 streamlit run dashboard/app.py
 ```
 
-Google Cloud credentials with appropriate BigQuery access are required.
+The CSV-based dashboard does not require Google Cloud credentials. Install its dependencies with `pip install -r dashboard/requirements.txt` before running it locally.
 
 ### Airflow
 
@@ -315,27 +324,38 @@ Terraform configuration is located in `terraform/main.tf`, using Google Cloud pr
 
 Both existing datasets were imported into local Terraform state. The latest `terraform plan` confirmed **No changes**, meaning the configuration matched the deployed datasets. Terraform state is local and is not committed to GitHub.
 
-### Streamlit Deployment on Google Cloud Run
+### Current Deployment: Streamlit Community Cloud
 
-The Streamlit dashboard is containerized with Docker and deployed to Cloud Run.
+The public dashboard is deployed from the `streamlit-community-cloud` GitHub branch.
 
-**Deployment architecture:**
+- **Hosting:** Streamlit Community Cloud
+- **Main application:** `dashboard/app.py`
+- **Dependencies:** `dashboard/requirements.txt`
+- **Data source:** Prepared CSV files in the `data/` directory
+- **Google Cloud credentials:** Not required for the public dashboard
+
+**Live Dashboard:**
+
+https://data-center-energy-efficiency.streamlit.app/
+
+All five dashboard sections were tested successfully after deployment.
+
+### Previous Deployment: Google Cloud Run
+
+The original Streamlit dashboard was containerized with Docker and deployed through Google Artifact Registry to Google Cloud Run.
+
+**Previous deployment architecture:**
 
 `Streamlit → Docker → Artifact Registry → Cloud Run → BigQuery`
 
 - **Cloud Run service:** `data-center-dashboard`
 - **Region:** `europe-west1`
-- **Container image:** `streamlit-app:v2`
-- **Authentication:** Cloud Run service account with BigQuery access
-- **Access:** Public dashboard URL
+- **Authentication:** Service account with BigQuery access
+- **Status:** Previous deployment; not the current public dashboard
 
-**Live Dashboard:**
+The original BigQuery-backed implementation remains documented in the project and preserved on the `main` branch.
 
-https://data-center-dashboard-971098779686.europe-west1.run.app
-
-The deployed dashboard includes all five analytical sections and was manually verified against BigQuery-backed data.
-
-Cloud Run hosts the Streamlit application. Airflow orchestration runs separately in the local Docker Compose environment.
+Airflow orchestration continues to be a separate, locally configured Docker Compose workflow.
 
 ## Data Limitations
 
