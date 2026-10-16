@@ -338,6 +338,8 @@ The public dashboard is deployed from the `streamlit-community-cloud` GitHub bra
 
 https://data-center-energy-efficiency.streamlit.app/
 
+**Repository branches:** The live dashboard is deployed from `streamlit-community-cloud` using prepared CSV datasets. The `main` branch preserves the original BigQuery-backed dashboard implementation.
+
 All five dashboard sections were tested successfully after deployment.
 
 ### Previous Deployment: Google Cloud Run
